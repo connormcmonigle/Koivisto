@@ -54,12 +54,15 @@ namespace tuning {
         I_KNIGHT_DISTANCE_ENEMY_KING,
 
         I_ROOK_OPEN_FILE,
+        I_ROOK_OPEN_FILE_BLOCKED,
         I_ROOK_HALF_OPEN_FILE,
+        I_ROOK_HALF_OPEN_FILE_BLOCKED,
         I_ROOK_KING_LINE,
 
         I_BISHOP_DOUBLED,
         I_BISHOP_FIANCHETTO,
         I_BISHOP_PIECE_SAME_SQUARE_E,
+        I_BISHOP_OUTPOST,
 
         I_QUEEN_DISTANCE_ENEMY_KING,
 
@@ -633,6 +636,12 @@ namespace tuning {
             U64 bKingRookAttacks   = lookUpRookAttack  (blackKingSquare, occupied)  & ~whiteTeam;
             U64 wKingKnightAttacks = KNIGHT_ATTACKS    [whiteKingSquare]            & ~blackTeam;
             U64 bKingKnightAttacks = KNIGHT_ATTACKS    [blackKingSquare]            & ~whiteTeam;
+
+            U64 whiteOutpostCandidates = outpostCandidates<WHITE>(whitePawnCover, blackPawnCover);
+            U64 blackOutpostCandidates = outpostCandidates<BLACK>(blackPawnCover, whitePawnCover);
+    
+            U64 whiteOutpostFiles = fillFile(whiteOutpostCandidates);
+            U64 blackOutpostFiles = fillFile(blackOutpostCandidates);
             
             // clang-format off
             count[I_PAWN_DOUBLED_AND_ISOLATED] = (
@@ -671,7 +680,6 @@ namespace tuning {
             while (k) {
                 square = bitscanForward(k);
                 attacks = KNIGHT_ATTACKS[square];
-                count[I_KNIGHT_OUTPOST] += isOutpost(square, WHITE, blackPawns, whitePawnCover);
                 count[I_KNIGHT_DISTANCE_ENEMY_KING] += manhattanDistance(square, blackKingSquare);
                 count[I_SAFE_KNIGHT_CHECK] += bitCount(bKingKnightAttacks & attacks & ~blackPawnCover);
                 k = lsbReset(k);
@@ -681,12 +689,13 @@ namespace tuning {
             while (k) {
                 square = bitscanForward(k);
                 attacks = KNIGHT_ATTACKS[square];
-                count[I_KNIGHT_OUTPOST] -= isOutpost(square, BLACK, whitePawns, blackPawnCover);
                 count[I_KNIGHT_DISTANCE_ENEMY_KING] -= manhattanDistance(square, whiteKingSquare);
                 count[I_SAFE_KNIGHT_CHECK] -= bitCount(wKingKnightAttacks & attacks & ~whitePawnCover);
                 k = lsbReset(k);
             }
-
+            count[I_KNIGHT_OUTPOST] = (
+                + bitCount(whiteOutpostCandidates & b->getPieces(WHITE, KNIGHT))
+                - bitCount(blackOutpostCandidates & b->getPieces(BLACK, KNIGHT)));
 
             k = b->getPieces()[WHITE_BISHOP];
             while (k) {
@@ -717,12 +726,14 @@ namespace tuning {
                         (square == B2 && blackPawns & ONE << A7 && blackPawns & ONE << C7
                          && blackPawns & (ONE << B6 | ONE << B5));
                 count[I_SAFE_BISHOP_CHECK] -= bitCount(wKingBishopAttacks & attacks & ~whitePawnCover);
-
                 k = lsbReset(k);
             }
             count[I_BISHOP_DOUBLED] += (
-                    +(bitCount(b->getPieces()[WHITE_BISHOP]) == 2)
-                    - (bitCount(b->getPieces()[BLACK_BISHOP]) == 2));
+                + (bitCount(b->getPieces()[WHITE_BISHOP]) == 2)
+                - (bitCount(b->getPieces()[BLACK_BISHOP]) == 2));
+            count[I_BISHOP_OUTPOST] = (
+                + bitCount(whiteOutpostCandidates & b->getPieces(WHITE, BISHOP))
+                - bitCount(blackOutpostCandidates & b->getPieces(BLACK, BISHOP)));
     
     
             k = b->getPieces()[WHITE_ROOK];
@@ -745,15 +756,20 @@ namespace tuning {
             }
 
             count[I_ROOK_KING_LINE] += (
-                    +bitCount(lookUpRookAttack(blackKingSquare, *b->getOccupied()) & b->getPieces(WHITE, ROOK))
-                    - bitCount(lookUpRookAttack(whiteKingSquare, *b->getOccupied()) & b->getPieces(BLACK, ROOK)));
+                + bitCount(lookUpRookAttack(blackKingSquare, *b->getOccupied()) & b->getPieces(WHITE, ROOK))
+                - bitCount(lookUpRookAttack(whiteKingSquare, *b->getOccupied()) & b->getPieces(BLACK, ROOK)));
             count[I_ROOK_OPEN_FILE] += (
-                    +bitCount(openFiles & b->getPieces(WHITE, ROOK))
-                    - bitCount(openFiles & b->getPieces(BLACK, ROOK)));
+                + bitCount(openFiles & b->getPieces(WHITE, ROOK) & ~blackOutpostFiles)
+                - bitCount(openFiles & b->getPieces(BLACK, ROOK) & ~whiteOutpostFiles));
+            count[I_ROOK_OPEN_FILE_BLOCKED] += (
+                + bitCount(openFiles & b->getPieces(WHITE, ROOK) & blackOutpostFiles)
+                - bitCount(openFiles & b->getPieces(BLACK, ROOK) & whiteOutpostFiles));
             count[I_ROOK_HALF_OPEN_FILE] += (
-                    +bitCount(openFilesBlack & ~openFiles & b->getPieces(WHITE, ROOK))
-                    - bitCount(openFilesWhite & ~openFiles & b->getPieces(BLACK, ROOK)));
-
+                + bitCount(openFilesBlack & ~openFiles & b->getPieces(WHITE, ROOK) & ~blackOutpostFiles)
+                - bitCount(openFilesWhite & ~openFiles & b->getPieces(BLACK, ROOK) & ~whiteOutpostFiles));
+            count[I_ROOK_HALF_OPEN_FILE_BLOCKED] += (
+                + bitCount(openFilesBlack & ~openFiles & b->getPieces(WHITE, ROOK) & blackOutpostFiles)
+                - bitCount(openFilesWhite & ~openFiles & b->getPieces(BLACK, ROOK) & whiteOutpostFiles));
 
             k = b->getPieces()[WHITE_QUEEN];
             while (k) {
@@ -1609,11 +1625,14 @@ namespace tuning {
                 "KNIGHT_OUTPOST",
                 "KNIGHT_DISTANCE_ENEMY_KING",
                 "ROOK_OPEN_FILE",
+                "ROOK_OPEN_FILE_BLOCKED",
                 "ROOK_HALF_OPEN_FILE",
+                "ROOK_HALF_OPEN_FILE_BLOCKED",
                 "ROOK_KING_LINE",
                 "BISHOP_DOUBLED",
                 "BISHOP_FIANCHETTO",
                 "BISHOP_PIECE_SAME_SQUARE_E",
+                "BISHOP_OUTPOST",
                 "QUEEN_DISTANCE_ENEMY_KING",
                 "KING_CLOSE_OPPONENT",
                 "KING_PAWN_SHIELD",
@@ -1721,6 +1740,7 @@ namespace tuning {
         std::cout << "EvalScore piece_our_king_square_table[5][15*15]{\n";
         for (Piece p = 0; p < 5; p++) {
             std::cout << "\t{";
+            if(p == PAWN)
             for (int n = 0; n < 15 * 15; n++) {
                 if (n % 5 == 0) std::cout << std::endl << "\t\t";
                 std::cout << threadData[0].w_piece_our_king_square_table[p][n] << ", ";
@@ -1734,6 +1754,7 @@ namespace tuning {
         std::cout << "EvalScore piece_opp_king_square_table[5][15*15]{\n";
         for (Piece p = 0; p < 5; p++) {
             std::cout << "\t{";
+            if(p == PAWN)
             for (int n = 0; n < 15 * 15; n++) {
                 if (n % 5 == 0) std::cout << std::endl << "\t\t";
                 std::cout << threadData[0].w_piece_opp_king_square_table[p][n] << ", ";

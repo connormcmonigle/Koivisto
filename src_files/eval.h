@@ -35,8 +35,14 @@ extern float* phaseValues;
 extern EvalScore kingSafetyTable[100];
 extern EvalScore passer_rank_n[16];
 
-bool isOutpost(Square s, Color c, U64 opponentPawns, U64 pawnCover);
-bool hasMatingMaterial(Board* b, bool side);
+template<Color us> U64 outpostCandidates(U64 usPawnAttacks, U64 themPawnAttacks){
+    if constexpr (us == WHITE){
+        return usPawnAttacks & ~fillSouth(themPawnAttacks);
+    }else{
+        return usPawnAttacks & ~fillNorth(themPawnAttacks);
+    }
+}
+bool hasMatingMaterial(Board* b, Color us);
 void addToKingSafety(U64 attacks, U64 kingZone, int& pieceCount, int& valueOfAttacks, int factor);
 
 class Evaluator {
