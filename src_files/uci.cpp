@@ -55,9 +55,7 @@ void uci_loop(bool bench) {
         std::atexit(uci_quit);
         std::string line;
 
-        while (true) {
-            getline(cin, line);
-
+        while (getline(cin, line)) {
             if (line == "quit") {
                 exit(0);
             } else {
@@ -382,6 +380,24 @@ void uci_set_option(std::string& name, std::string& value) {
         
         search_setThreads(count);
     }
+    
+    if (name.find("LMP_IMPROVING_A")     != string::npos) {
+        LMP_IMPROVING_A = stoi(value);
+        search_computeSearchTables();
+    }
+    if (name.find("LMP_IMPROVING_B")     != string::npos) {
+        LMP_IMPROVING_B = stoi(value);
+        search_computeSearchTables();
+    }
+    if (name.find("LMP_NOT_IMPROVING_A") != string::npos) {
+        LMP_NOT_IMPROVING_A = stoi(value);
+        search_computeSearchTables();
+    }
+    if (name.find("LMP_NOT_IMPROVING_B") != string::npos) {
+        LMP_NOT_IMPROVING_B = stoi(value);
+        search_computeSearchTables();
+    }
+    
 }
 
 /**
