@@ -39,7 +39,7 @@ SearchOverview overview;
 int lmrReductions[256][256];
 
 // data about each thread. this contains nodes, depth etc as well as a pointer to the history tables
-ThreadData tds[MAX_THREADS]{};
+std::vector<std::unique_ptr<ThreadData>> tds;
 
 int RAZOR_MARGIN     = 198;
 int FUTILITY_MARGIN  = 92;
@@ -70,7 +70,7 @@ int lmp[2][8] = {{0, 2, 3, 4, 6, 8, 13, 18}, {0, 3, 4, 6, 8, 12, 20, 30}};
 U64 totalNodes() {
     U64 tn = 0;
     for (int i = 0; i < threadCount; i++) {
-        tn += tds[i].nodes;
+        tn += tds[i]->nodes;
     }
     return tn;
 }
@@ -82,7 +82,7 @@ U64 totalNodes() {
 int selDepth() {
     int maxSd = 0;
     for (int i = 0; i < threadCount; i++) {
-        maxSd = tds[i].seldepth > maxSd ? tds[i].seldepth : maxSd;
+        maxSd = tds[i]->seldepth > maxSd ? tds[i]->seldepth : maxSd;
     }
     return maxSd;
 }
@@ -94,7 +94,7 @@ int selDepth() {
 int tbHits() {
     int th = 0;
     for (int i = 0; i < threadCount; i++) {
-        th += tds[i].tbhits;
+        th += tds[i]->tbhits;
     }
     return th;
 }
@@ -122,10 +122,10 @@ void search_clearHash() {
  */
 void search_clearHistory() {
     for(int i = 0; i < threadCount; i++){
-        if(tds[i].searchData != nullptr){
-            delete tds[i].searchData;
+        if(tds[i]->searchData != nullptr){
+            delete tds[i]->searchData;
         }
-        tds[i].searchData = new SearchData();
+        tds[i]->searchData = new SearchData();
     }
 }
 
@@ -185,10 +185,10 @@ void search_setThreads(int threads){
         threads = MAX_THREADS;
     threadCount = threads;
     for(int i = 0; i < threadCount; i++){
-        if(tds[i].searchData != nullptr){
-            delete tds[i].searchData;
+        if(tds[i]->searchData != nullptr){
+            delete tds[i]->searchData;
         }
-        tds[i].searchData = new SearchData();
+        tds[i]->searchData = new SearchData();
     }
 }
 
@@ -199,11 +199,11 @@ void search_init(int hashSize) {
     if(table != nullptr) delete table;
     table = new TranspositionTable(hashSize);
     initLMR();
-    
+    tds = std::vector<std::unique_ptr<ThreadData>>(MAX_THREADS);
     for (int i = 0; i < MAX_THREADS; i++) {
-        tds[i].threadID = i;
+        tds[i] = std::make_unique<ThreadData>(i);
     }
-    tds[0].searchData = new SearchData();
+    tds[0]->searchData = new SearchData();
 }
 
 /**
@@ -214,9 +214,9 @@ void search_cleanUp() {
     table = nullptr;
     
     for (int i = 0; i < MAX_THREADS; i++) {
-        if(tds[i].searchData != nullptr){
-            delete tds[i].searchData;
-            tds[i].searchData = nullptr;
+        if(tds[i]->searchData != nullptr){
+            delete tds[i]->searchData;
+            tds[i]->searchData = nullptr;
         }
     }
 }
@@ -508,10 +508,10 @@ Move bestMove(Board* b, Depth maxDepth, TimeManager* timeManager, int threadId) 
         // for each thread, we will generate a new search data object
         for (int i = 0; i < threadCount; i++) {
             // reseting the thread data
-            tds[i].threadID = i;
-            tds[i].tbhits   = 0;
-            tds[i].nodes    = 0;
-            tds[i].seldepth = 0;
+            tds[i]->threadID = i;
+            tds[i]->tbhits   = 0;
+            tds[i]->nodes    = 0;
+            tds[i]->seldepth = 0;
         }
         
         // we will call this function for the other threads which will skip this part and jump straight to the part
@@ -522,7 +522,7 @@ Move bestMove(Board* b, Depth maxDepth, TimeManager* timeManager, int threadId) 
     }
     
     // the thread id starts at 0 for the first thread
-    ThreadData* td = &tds[threadId];
+    ThreadData* td = tds[threadId].get();
     
     // start the basic search on all threads
     Depth d = 1;
